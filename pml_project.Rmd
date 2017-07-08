@@ -1,0 +1,224 @@
+---
+title: "PML_project"
+author: "Krychko Mykyta"
+date: '9 july 2017 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(lattice)
+library(caret)
+library(corrplot)
+library(kernlab)
+library(randomForest)
+
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+Links to dataset you can find in appendix.
+
+## Downloads files
+
+I prefer that each my R project (files) should be in personal folder. So I create folder for this project and wet this folder as working directory. After that R should download necessary files in created folder(only in case if it wasn't download before). 
+
+
+```{r preparation}
+
+# create and change working directory
+
+if(!endsWith(getwd(), "project_PML")){
+    if (!file.exists("project_PML")) {dir.create("project_PML")}
+    setwd("./project_PML")
+}
+
+# download files in working directory
+trainingFileName <- "pml-Training.csv"
+trainingFileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+if(!file.exists(trainingFileName)){
+    download.file(trainingFileUrl, destfile = trainingFileName)
+}
+testingFileName <- "pml-Testing.csv"
+testingFileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if(!file.exists(testingFileName)){
+    download.file(testingFileUrl, destfile = testingFileName)    
+}   
+
+
+```
+
+## Read and clean data
+
+After files downloaded in workin directory, we shoud read it and make it more clean. How I decide which column we should use for our prediction is beyond the scope of this work (I exclude exploratary analysis from this report). And I'm limited by the number of printed characters in this work. So let's take my word for it that all the unneeded columns in the next fragment were excluded. Since the data cleaning will need to be done twice, I decided to create a function to clear the data. This, in particular, will make the code cleaner and more readable
+
+```{r Read_and_clean_data}
+# read the csv file for training 
+trainingData <- read.csv(trainingFileName, na.strings= c("NA",""," "))
+testingData <- read.csv(testingFileName, na.strings= c("NA",""," "))
+
+
+# Create function for creaning data
+
+cleanData <- function(dataFrame){
+dataFrame <- dataFrame[, colSums(is.na(dataFrame)) == 0]
+classe <- dataFrame$classe    
+forRemove <- grepl("^X|timestamp|window", names(dataFrame))
+temp <- dataFrame[, !forRemove]
+cleaned <-  temp[, sapply(temp, is.numeric)]
+cleaned$classe <- classe
+cleaned
+}
+
+#Clean data
+trainingData <- cleanData(trainingData)
+testingData <- cleanData(testingData)
+
+dim(trainingData)
+dim(testingData)
+```
+
+In result we have 2 cleaned sets: 
+- trainingData: 53 variables and 19622 observations
+- testingData: 53 variables and 20 observations
+
+
+## Split the data
+
+In next chunk we create 2 datasets: one for training ours models and other for cross validation our models.  
+
+``` {r slice data}
+# split testing data to training and cross validation sets
+set.seed(1) # just for reproducile results
+inTrain <- createDataPartition(y = trainingData$classe, p = 0.7, list = FALSE)
+trainingSet <- trainingData[inTrain, ]
+crossValidationSet <- trainingData[-inTrain, ]
+```
+As example in video lection was -- I split data to:
+
+
+- 70 % - trainingSet
+
+
+- 30 % - crossValidationSet
+
+## Data modeling
+
+Next I decided to compare to similar models from different packeges. I choose randomForest from package CARET and from package RANDOMFOREST.
+
+I decide to compare accuracy and speed of this modeling.
+
+For this I create 2 models and Wrapped up it into time frames.
+
+For first model from RANDOMFOREST package we use all default settings. for second model from CARET packeg we use 10-fold cross validation and 100 trees when applying our model.
+After that we check our model on out CrossValidationSet and calculating our accuracy. 
+
+``` {R modeling}
+# fit a model to predict the classe using everything else as a predictor
+
+
+start.time <- Sys.time()
+RFpack_model <- randomForest(classe ~ ., data = trainingSet)
+end.time <- Sys.time()
+RFpack_time_taken <- end.time - start.time
+#RFpack_time_taken
+
+
+start.time <- Sys.time()
+controlModel <- trainControl(method = "cv", 10)
+CARETpack_model <- train(classe ~ ., data = trainingSet, method= "rf", ntree = 100, trControl = controlModel)
+end.time <- Sys.time()
+CARETpack_time_taken <- end.time - start.time
+#CARETpack_time_taken
+
+
+# crossvalidate the model using the remaining 30% of data
+
+RFpack_predictCrossVal <- predict(RFpack_model, crossValidationSet)
+RFpack_resultOfPrediction<- confusionMatrix(crossValidationSet$classe, RFpack_predictCrossVal)
+# RFpack_resultOfPrediction
+
+CARETpack_predictCrossVal <- predict(CARETpack_model, crossValidationSet)
+CARETpack_resultOfPrediction<- confusionMatrix(crossValidationSet$classe, CARETpack_predictCrossVal)
+# CARETpack_resultOfPrediction
+
+RFpack_accuracy <- postResample(RFpack_predictCrossVal, crossValidationSet$classe)
+# RFpack_accuracy
+
+CARETpack_accuracy <- postResample(CARETpack_predictCrossVal, crossValidationSet$classe)
+# CARETpack_accuracy
+
+```
+
+So lets look on our accuracy and modeling time.
+
+As we can see next result:
+
+# For RANDOMFOREST package results:
+``` {r RANDOMFOREST}
+RFpack_time_taken
+RFpack_accuracy
+```   
+
+# For CARET package results:
+``` {r CARET}
+CARETpack_time_taken
+CARETpack_accuracy
+```
+
+
+## Predicting for test data set
+
+After we get our 2 models I think we can use it for predict original testing data from web. We already clean it in previous steps. So we will just try to precict and compare results of 2 models in next chunk:
+
+``` {r predicting}
+#predict for test data set
+
+RFpack_result <- predict(RFpack_model, testingData)
+
+CARETpack_result <- predict(CARETpack_model, testingData)
+
+RFpack_result
+CARETpack_result
+```
+
+As we can see both model predict the same result.
+
+## Short conclusion:
+Randomforest package give little bit accuracy model than caret package using randomForest model of prediction. And randomforest works much faster than caret package. in case if 2 models give similar results I will prefer use randomForest package in future.
+
+
+
+## Appendix.
+
+### 1. Links to data sets
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+### 2. Used libraries:
+
+- library(ggplot2)
+- library(lattice)
+- library(caret)
+- library(corrplot)
+- library(kernlab)
+- library(randomForest)
+
+
+### 3. Correlation matrix visualization
+
+``` {r corrMatrix}
+# plot a correlation matrix
+correlMatrix <- cor(trainingSet[, -length(trainingSet)])
+corrplot(correlMatrix, order = "FPC", method = "circle", type = "lower", tl.cex = 0.8,  tl.col = rgb(0, 0, 0))
+
+```
