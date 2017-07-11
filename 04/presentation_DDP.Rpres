@@ -1,0 +1,80 @@
+Presentation for coursera project developing data product
+========================================================
+author: "Mykyta Krychko"
+date: "11 july 2017"
+autosize: true
+
+This info was taken from open source:
+
+<https://github.com/devua/csv/tree/master/salaries>
+
+Each year portal Developers of Ukraine is conducting a survey about salaries of ukrainian Developers.
+
+<https://dou.ua/>
+
+So I decide to share it information with you.
+
+In this dataset was 4152 developers.
+
+There are no any conclusions, just graphs. 
+
+
+
+```{r preparations, echo= FALSE}
+library(plotly)
+library(readr)
+library(data.table)
+library(ggplot2)
+
+
+
+salary_raw <- read.csv(url("https://raw.githubusercontent.com/devua/csv/master/salaries/2016_may_final.csv"), na.strings= c("NA",""," "))
+
+salary <- as.data.table(salary_raw[,c(2,3,4,7,12,13)])
+names(salary) <- c("position", "programing_language", "specialization", "salary", "sex", "age")
+salary$sex <- ifelse(salary$sex == "мужской", 1, 1)
+salary$sex <- as.integer(salary$sex)
+#salary$sex <- as.factor(salary$sex)
+salary <- salary[-c(876,1656)]
+```
+Popularity of IT positions in Ukraine 
+========================================================
+``` {R, echo= FALSE}
+pos <- as.data.table(table(salary$position))
+pos <- pos[order(-pos$N )]
+pos$V1 <- factor(pos$V1, levels = pos$V1)
+plot_ly(y = pos$V1, x = pos$N, type = "bar", orientation = "h") %>% 
+    layout(title = 'most popular programming language',autosize = TRUE)
+
+```
+
+Popularity of programming languages in Ukraine 
+========================================================
+``` {R, echo= FALSE}
+## most popular programming language
+pl <- as.data.table(table(salary$programing_language))
+pl <- pl[-2, ]
+pl <- pl[order(-pl$N )]
+pl$V1 <- factor(pl$V1, levels = pl$V1)
+plot_ly(x = pl$V1, y = pl$N, type = "bar") %>% 
+    layout(title = 'most popular programming language')
+```
+Year salary of developers depending on programing language in Ukraine 
+========================================================
+``` {R, echo= FALSE}
+## year salary depending on programing language
+salary <- as.data.table(salary)
+salaryPL <- salary[!is.na(programing_language)]
+salaryPL <- salaryPL[salaryPL$programing_language != "1С"]
+#levels(salaryPL$sex) <- c("men", "woman")
+plot_ly(y=salaryPL$salary *12, color = salaryPL$programing_language, type = "box") %>% 
+    layout(title = 'year salary depending on programing language')
+```
+Year salaries of developers depends on age in Ukraine 
+========================================================
+``` {R, echo= FALSE}
+## year salaries depends on age
+plot_ly(y=salaryPL$salary *12, x = salaryPL$age, type = "box")%>% 
+    layout(title = 'year salaries depends on age')
+```
+
